@@ -594,6 +594,7 @@ urlpatterns = [
     
     path('purchase_order_item',views.purchase_order_item,name='purchase_order_item'),
     path('sharepurchaseorderitemToEmail/', views.sharepurchaseorderitemToEmail, name='sharepurchaseorderitemToEmail'),
+    path('purchase_order_item_filter/', views.purchase_order_item_filter, name='purchase_order_item_filter'),
 
     #---------------- END -------------------> 
 

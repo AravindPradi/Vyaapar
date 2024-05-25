@@ -18265,9 +18265,24 @@ def purchase_order_item(request):
     items = ItemModel.objects.filter(company_id=cid)
     results = []
 
+    
+    from_date = request.POST.get('from_date')
+    to_date = request.POST.get('to_date')
+
     if items.exists():
         for part in items:
             purchase_items = PurchaseOrderItem.objects.filter(product_id=part.id)
+            
+            
+            if from_date and to_date:
+                try:
+                    from_date = datetime.strptime(from_date, '%Y-%m-%d')
+                    to_date = datetime.strptime(to_date, '%Y-%m-%d')
+                    purchase_items = purchase_items.filter(date__range=[from_date, to_date])
+                except ValueError:
+                    
+                    pass
+
             if purchase_items.exists():
                 qty = purchase_items.aggregate(total_qty=Sum('qty'))['total_qty'] or 0
                 total = purchase_items.aggregate(total_price=Sum('total'))['total_price'] or 0
@@ -18275,6 +18290,7 @@ def purchase_order_item(request):
                     'item_name': part.item_name,
                     'Quantity': qty,
                     'Total': total,
+                    'Date':part.item_date,
                 })
     else:
         results = [{'item_name': '', 'Quantity': 0, 'Total': 0}]
@@ -18282,7 +18298,59 @@ def purchase_order_item(request):
     total_Q = sum(result['Quantity'] for result in results)
     total_T = sum(result['Total'] for result in results)
 
-    return render(request, 'company/purchase_order_item.html', {'staff': staff, 'items': results, 'totalQ': total_Q, 'totalT': total_T})
+    return render(request, 'company/purchase_order_item.html', {'staff': staff, 'items': results, 'totalQ': total_Q, 'totalT': total_T, 'from_date': from_date, 'to_date': to_date})
+
+
+def purchase_order_item_filter(request):
+    if request.method == 'GET':
+        try:
+            from_date = request.GET.get('startD')
+            to_date = request.GET.get('endD')
+
+            if not from_date or not to_date:
+                return JsonResponse({'error': 'Missing date parameters'}, status=400)
+
+            from_date = datetime.strptime(from_date, '%Y-%m-%d')
+            to_date = datetime.strptime(to_date, '%Y-%m-%d')
+
+            sid = request.session.get('staff_id')
+            if not sid:
+                return JsonResponse({'error': 'Staff ID not found in session'}, status=400)
+
+            staff = staff_details.objects.get(id=sid)
+            cid = staff.company.id
+            items = ItemModel.objects.filter(company_id=cid)
+            results = []
+
+            if items.exists():
+                for part in items:
+                    purchase_items = PurchaseOrderItem.objects.filter(product_id=part.id, date__range=[from_date, to_date])
+                    if purchase_items.exists():
+                        qty = purchase_items.aggregate(total_qty=Sum('qty'))['total_qty'] or 0
+                        total = purchase_items.aggregate(total_price=Sum('total'))['total_price'] or 0
+                        results.append({
+                            'item_name': part.item_name,
+                            'Quantity': qty,
+                            'Total': total,
+                            
+                        })
+            else:
+                results = [{'item_name': '', 'Quantity': 0, 'Total': 0}]
+
+            return JsonResponse({'parties': results})
+
+        except ValueError as e:
+            return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
+        except staff_details.DoesNotExist:
+            return JsonResponse({'error': 'Staff not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': f'An error occurred: {str(e)}'}, status=500)
+    else:
+        return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+
+
+
 
 
 def sharepurchaseorderitemToEmail(request):
